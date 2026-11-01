@@ -125,7 +125,7 @@
         <div class="container">
             <header class="topbar">
                 <div class="greeting">
-                    <h1>Bienvenido, {{ Auth::user()->name }}</h1>
+                    <h1>Bienvenido, {{ Auth::user()->nombre_completo }}</h1>
                     <p>Estás ingresando como {{ $roleName }}.</p>
                 </div>
 

@@ -2,39 +2,45 @@
 
 namespace Database\Seeders;
 
+use App\Models\Role;
 use App\Models\User;
-use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
-use Illuminate\Support\Facades\Hash;
 
 class DatabaseSeeder extends Seeder
 {
-    use WithoutModelEvents;
-
-    /**
-     * Seed the application's database.
-     */
     public function run(): void
     {
-        User::query()->upsert([
-            [
-                'name' => 'Líder de Proyecto',
-                'email' => 'lider@estadia.com',
-                'password' => Hash::make('12345678'),
-                'role' => User::ROLE_LIDER,
-            ],
-            [
-                'name' => 'Profesor Demo',
-                'email' => 'profesor@estadia.com',
-                'password' => Hash::make('12345678'),
-                'role' => User::ROLE_PROFESOR,
-            ],
-            [
-                'name' => 'Estudiante Demo',
-                'email' => 'estudiante@estadia.com',
-                'password' => Hash::make('12345678'),
-                'role' => User::ROLE_ESTUDIANTE,
-            ],
-        ], ['email'], ['name', 'password', 'role']);
+        $nombresRol = [
+            User::ROLE_LIDER => 'Líder de Proyecto',
+            User::ROLE_PROFESOR => 'Profesor',
+            User::ROLE_ESTUDIANTE => 'Estudiante',
+        ];
+
+        // Solo crea los roles que aún no existan en la tabla.
+        foreach ($nombresRol as $clave => $nombre) {
+            if (! Role::idPorClave($clave)) {
+                Role::create(['nombre_rol' => $nombre, 'descripcion' => $nombre]);
+            }
+        }
+
+        $demo = [
+            [User::ROLE_LIDER, 'LIDER001', 'Líder', 'de Proyecto', 'lider@estadia.com'],
+            [User::ROLE_PROFESOR, 'PROF001', 'Profesor', 'Demo', 'profesor@estadia.com'],
+            [User::ROLE_ESTUDIANTE, 'ITI2023001', 'Estudiante', 'Demo', 'estudiante@estadia.com'],
+        ];
+
+        foreach ($demo as [$clave, $matricula, $nombre, $apellidos, $correo]) {
+            User::updateOrCreate(
+                ['correo_institucional' => $correo],
+                [
+                    'matricula' => $matricula,
+                    'nombre' => $nombre,
+                    'apellidos' => $apellidos,
+                    'password_hash' => '12345678',
+                    'id_rol' => Role::idOCrearPorClave($clave),
+                    'estatus' => User::ESTATUS_ACTIVO,
+                ]
+            );
+        }
     }
 }
