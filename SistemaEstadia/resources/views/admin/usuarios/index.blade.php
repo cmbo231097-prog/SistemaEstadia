@@ -25,16 +25,15 @@
         display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; gap:10px;
         padding:12px 16px; border-top:1px solid var(--border); font-size:12px; color:var(--muted);
     }
-    .pager { display:flex; flex-wrap:wrap; gap:6px; align-items:center; }
-    .pg { font-size:12px; color:var(--blue); font-weight:700; padding:2px 4px; }
-    a.pg:hover { text-decoration:underline; }
-    .pg.current { color:var(--text); }
-    .pg.disabled, .pg.gap { color:#94a3b8; font-weight:400; }
 
     .role-pill { display:inline-block; min-width:118px; padding:6px 14px; border-radius:999px; font-size:11.5px; font-weight:700; text-align:center; }
     .role-lider { background:#ede9fe; color:#6d28d9; }
     .role-profesor { background:var(--info-bg); color:var(--info-fg); }
     .role-estudiante { background:var(--idle-bg); color:#475569; }
+
+    .estado-btn { border:0; cursor:pointer; font-family:inherit; transition:filter .15s, box-shadow .15s; }
+    .estado-btn:hover { filter:brightness(.95); box-shadow:0 0 0 2px rgba(30,58,110,.25); }
+    .estado-btn:focus-visible { outline:3px solid #93b4ff; outline-offset:2px; }
 
     .act-btn { background:none; border:1px solid transparent; font-size:12px; font-weight:700; padding:6px 10px; border-radius:6px; }
     .act-edit { color:var(--blue); }
@@ -60,7 +59,6 @@
     .input-ico { position:relative; }
     .input-ico .ico { position:absolute; left:10px; top:50%; transform:translateY(-50%); font-size:13px; pointer-events:none; }
     .input-ico .field-control { padding-left:32px; }
-    .mf-info { background:#f8fafc; border:1px solid var(--border); border-radius:8px; padding:10px 12px; font-size:11.5px; color:var(--muted); }
     .mf-foot { display:flex; justify-content:flex-end; gap:10px; padding:14px 22px; border-top:1px solid var(--border); background:#fff; flex-wrap:wrap; }
     .mf-foot button { border-radius:8px; padding:10px 22px; font-size:13px; font-weight:700; border:1px solid var(--border); }
     .mf-cancel { background:#fff; color:#334155; }
@@ -84,7 +82,7 @@
     <p class="page-sub">Catálogo centralizado de cuentas institucionales, control de perfiles y asignación de roles de acceso</p>
 
     @if (session('status'))
-        <div class="alert alert-ok" role="status">{{ session('status') }}</div>
+        <div class="alert alert-ok" role="status" data-autocierre>{{ session('status') }}</div>
     @endif
     @if (session('error'))
         <div class="alert alert-err" role="alert">{{ session('error') }}</div>
@@ -134,7 +132,26 @@
                             <td>{{ $u->correo_institucional }}</td>
                             <td class="center"><span class="role-pill role-{{ $u->role }}">{{ $roles[$u->role] }}</span></td>
                             <td class="center">
-                                <span class="badge {{ $u->isActivo() ? 'b-ok' : 'b-bad' }}">{{ $u->isActivo() ? 'Activo' : 'Inactivo' }}</span>
+                                @if ($esSelf)
+                                    <span class="badge {{ $u->isActivo() ? 'b-ok' : 'b-bad' }}" title="No puedes desactivar tu propia cuenta">{{ $u->isActivo() ? 'Activo' : 'Inactivo' }}</span>
+                                @else
+                                    <form method="POST" action="{{ route('admin.usuarios.estatus', $u) }}" id="estatus-{{ $u->getKey() }}" style="display:inline">
+                                        @csrf
+                                        @method('PATCH')
+                                        <input type="hidden" name="q" value="{{ $filtros['q'] }}">
+                                        <input type="hidden" name="filtro_rol" value="{{ $filtros['rol'] }}">
+                                        <input type="hidden" name="estado" value="{{ $filtros['estado'] }}">
+                                        <input type="hidden" name="page" value="{{ $usuarios->currentPage() }}">
+                                        <button type="button" class="badge estado-btn {{ $u->isActivo() ? 'b-ok' : 'b-bad' }}"
+                                            title="{{ $u->isActivo() ? 'Clic para desactivar' : 'Clic para activar' }}"
+                                            aria-label="Estado de {{ $u->nombre_completo }}: {{ $u->isActivo() ? 'activo' : 'inactivo' }}. Presiona para cambiarlo"
+                                            data-confirm
+                                            data-title="{{ $u->isActivo() ? 'Desactivar usuario' : 'Activar usuario' }}"
+                                            data-message="¿Estás seguro de cambiar el estado de {{ $u->nombre_completo }} ({{ $u->matricula }}) a {{ $u->isActivo() ? 'Inactivo? No podrá iniciar sesión mientras esté inactivo.' : 'Activo? Podrá iniciar sesión nuevamente.' }}"
+                                            data-ok-label="{{ $u->isActivo() ? 'Desactivar' : 'Activar' }}"
+                                            data-submit="#estatus-{{ $u->getKey() }}">{{ $u->isActivo() ? 'Activo' : 'Inactivo' }} ⇄</button>
+                                    </form>
+                                @endif
                             </td>
                             <td class="center" style="white-space:nowrap">
                                 <button type="button" class="act-btn act-edit btn-editar" aria-label="Editar a {{ $u->nombre_completo }}"
@@ -267,25 +284,23 @@
 
                     <div class="mf-field {{ $err('password') ? 'invalid' : '' }}">
                         <label for="fPassword"><span id="lblPassword">Contraseña inicial *</span></label>
-                        <div class="input-ico">
+                        <div class="input-ico has-toggle">
                             <span class="ico" aria-hidden="true">🔒</span>
                             <input type="password" id="fPassword" name="password" class="field-control" minlength="8" required
                                 autocomplete="new-password" placeholder="Mínimo 8 caracteres">
+                            @include('partials.toggle-password', ['target' => 'fPassword'])
                         </div>
                         @if ($err('password'))<div class="mf-error">{{ $err('password') }}</div>@endif
                     </div>
 
                     <div class="mf-field">
                         <label for="fPasswordConf">Confirmar contraseña *</label>
-                        <div class="input-ico">
+                        <div class="input-ico has-toggle">
                             <span class="ico" aria-hidden="true">🔒</span>
                             <input type="password" id="fPasswordConf" name="password_confirmation" class="field-control" minlength="8" required
                                 autocomplete="new-password" placeholder="Repite la contraseña">
+                            @include('partials.toggle-password', ['target' => 'fPasswordConf'])
                         </div>
-                    </div>
-
-                    <div class="mf-full mf-info" id="infoPassword">
-                        🔒 La contraseña se guardará encriptada. El envío de la notificación de primer acceso (FN.13) se habilitará próximamente.
                     </div>
                 </div>
             </div>
@@ -373,9 +388,11 @@
 
             $('userModalClose').addEventListener('click', cerrar);
             $('userModalCancel').addEventListener('click', cerrar);
-            overlay.addEventListener('click', (e) => { if (e.target === overlay) cerrar(); });
+            // Clic fuera del cuadro o Escape piden confirmación si hay datos sin guardar.
+            const intentarCerrar = protegerModal(overlay, form, cerrar);
+            overlay.addEventListener('click', (e) => { if (e.target === overlay) intentarCerrar(); });
             document.addEventListener('keydown', (e) => {
-                if (e.key === 'Escape' && overlay.classList.contains('open')) cerrar();
+                if (e.key === 'Escape' && overlay.classList.contains('open')) intentarCerrar();
             });
 
             // Evita doble envío y valida campos obligatorios en el navegador antes de enviar.

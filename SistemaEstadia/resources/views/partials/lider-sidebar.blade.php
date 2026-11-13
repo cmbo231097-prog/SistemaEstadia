@@ -4,12 +4,14 @@
         'Monitoreo & Experimento' => [
             ['icon' => '📊', 'label' => 'Dashboard General', 'route' => 'dashboard', 'active' => request()->routeIs('dashboard')],
             ['icon' => '📁', 'label' => 'Carga y Sanitización', 'route' => 'corpus.index', 'active' => request()->routeIs('corpus.*')],
-            ['icon' => '🤖', 'label' => 'Evaluación con IA'],
-            ['icon' => '⚖️', 'label' => 'Motor Comparativo'],
+            ['icon' => '✍️', 'label' => 'Captura de Evaluación', 'route' => 'evaluacion-docente.index', 'active' => request()->routeIs('evaluacion-docente.*')],
+            ['icon' => '🤖', 'label' => 'Evaluación con IA', 'route' => 'evaluacion-ia.index', 'active' => request()->routeIs('evaluacion-ia.*')],
+            ['icon' => '⚖️', 'label' => 'Motor Comparativo', 'route' => 'motor-comparativo.index', 'active' => request()->routeIs('motor-comparativo.*')],
         ],
         'Reportes Gerenciales' => [
-            ['icon' => '📄', 'label' => 'Reporte de Discrepancia (PDF)'],
-            ['icon' => '⏱️', 'label' => 'Eficiencia de Tiempos (XLSX)'],
+            ['icon' => '📄', 'label' => 'Reporte de Discrepancia (PDF)', 'route' => 'reportes.discrepancia.index', 'active' => request()->routeIs('reportes.discrepancia.*')],
+            ['icon' => '⏱️', 'label' => 'Eficiencia de Tiempos (XLSX)', 'route' => 'reportes.tiempos.index', 'active' => request()->routeIs('reportes.tiempos.*')],
+            ['icon' => '📈', 'label' => 'Rendimiento Grupal (XLSX)', 'route' => 'rendimiento-grupal.index', 'active' => request()->routeIs('rendimiento-grupal.*')],
         ],
         'Administración & Base de Datos' => [
             ['icon' => '👥', 'label' => 'Gestión de Usuarios', 'route' => 'admin.usuarios.index', 'active' => request()->routeIs('admin.usuarios.*')],

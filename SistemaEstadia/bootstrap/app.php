@@ -11,9 +11,13 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
+        // Todas las pantallas se piden de nuevo al servidor para que los listados reflejen siempre la base de datos.
+        $middleware->appendToGroup('web', \App\Http\Middleware\SinCacheNavegador::class);
+
         $middleware->alias([
             'rol' => \App\Http\Middleware\EnsureRole::class,
         ]);
+        $middleware->trustProxies(at: '*');
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         //

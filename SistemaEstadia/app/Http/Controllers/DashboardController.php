@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\SolicitudProfesor;
 use App\Models\User;
 use Illuminate\Support\Facades\Auth;
 
@@ -35,6 +36,7 @@ class DashboardController extends Controller
             return view('dashboard.estudiante', [
                 'user' => $user,
                 'roleName' => trim('Estudiante - '.$user->matricula, ' -'),
+                'solicitudProfesor' => SolicitudProfesor::pendienteDe($user->id_usuario),
                 ...$this->datosEstudiante(),
             ]);
         }

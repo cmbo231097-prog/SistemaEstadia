@@ -9,11 +9,12 @@
         ],
         'Evaluación & Corpus' => [
             ['icon' => '📁', 'label' => 'Carga y Sanitización (PDF)', 'route' => 'corpus.index', 'active' => request()->routeIs('corpus.*')],
-            ['icon' => '✍️', 'label' => 'Captura de Evaluación'],
-            ['icon' => '⚖️', 'label' => 'Motor Comparativo'],
+            ['icon' => '✍️', 'label' => 'Captura de Evaluación', 'route' => 'evaluacion-docente.index', 'active' => request()->routeIs('evaluacion-docente.*')],
+            ['icon' => '🤖', 'label' => 'Evaluación con IA', 'route' => 'evaluacion-ia.index', 'active' => request()->routeIs('evaluacion-ia.*')],
+            ['icon' => '⚖️', 'label' => 'Motor Comparativo', 'route' => 'motor-comparativo.index', 'active' => request()->routeIs('motor-comparativo.*')],
         ],
         'Reportes Académicos' => [
-            ['icon' => '📈', 'label' => 'Rendimiento Grupal (.xlsx)'],
+            ['icon' => '📈', 'label' => 'Rendimiento Grupal (.xlsx)', 'route' => 'rendimiento-grupal.index', 'active' => request()->routeIs('rendimiento-grupal.*')],
         ],
     ];
 @endphp

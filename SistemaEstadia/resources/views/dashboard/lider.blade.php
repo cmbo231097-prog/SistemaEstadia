@@ -47,8 +47,9 @@
             data-message="Se enviarán a la API del LLM los lotes sanitizados y pendientes de evaluación. ¿Deseas continuar?"
             data-ok-label="Enviar lote"
             data-success="Lote enviado a la cola de evaluación (simulado).">🚀 Enviar Lote a IA</button>
-        <button type="button" class="btn btn-green" data-soon="Reporte de Discrepancia (PDF)">📄 Rep. Discrepancia (PDF)</button>
-        <button type="button" class="btn btn-orange" data-soon="Reporte de Tiempos (XLSX)">📊 Rep. Tiempos (Excel)</button>
+        <a href="{{ route('reportes.discrepancia.index') }}" class="btn btn-green" style="text-decoration:none">📄 Rep. Discrepancia (PDF)</a>
+        <a href="{{ route('reportes.tiempos.index') }}" class="btn btn-orange" style="text-decoration:none">📊 Rep. Tiempos (Excel)</a>
+        <a href="{{ route('rendimiento-grupal.index') }}" class="btn btn-blue" style="text-decoration:none">📈 Rep. Rendimiento Grupal (Excel)</a>
     </section>
 
     {{-- Tabla de lotes --}}

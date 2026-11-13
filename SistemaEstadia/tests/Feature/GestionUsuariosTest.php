@@ -219,4 +219,36 @@ class GestionUsuariosTest extends TestCase
         $this->actingAs($lider)->delete(route('admin.usuarios.destroy', $otroLider))->assertSessionHas('error');
         $this->assertSame(2, User::count());
     }
+
+    public function test_lider_alterna_el_estado_de_otro_usuario_desde_el_listado(): void
+    {
+        $lider = $this->lider();
+        $profesor = $this->crearUsuario(User::ROLE_PROFESOR, 'PROF001');
+
+        $this->actingAs($lider)->get(route('admin.usuarios.index'))
+            ->assertOk()
+            ->assertSee(route('admin.usuarios.estatus', $profesor), false)
+            ->assertSee('Desactivar usuario');
+
+        $this->actingAs($lider)->patch(route('admin.usuarios.estatus', $profesor))
+            ->assertRedirect(route('admin.usuarios.index'))
+            ->assertSessionHas('status');
+        $this->assertSame(User::ESTATUS_INACTIVO, $profesor->fresh()->estatus);
+
+        $this->actingAs($lider)->patch(route('admin.usuarios.estatus', $profesor));
+        $this->assertSame(User::ESTATUS_ACTIVO, $profesor->fresh()->estatus);
+    }
+
+    public function test_el_lider_no_puede_desactivar_su_propia_cuenta_ni_otros_roles_cambiar_estados(): void
+    {
+        $lider = $this->lider();
+
+        $this->actingAs($lider)->patch(route('admin.usuarios.estatus', $lider))->assertSessionHas('error');
+        $this->assertSame(User::ESTATUS_ACTIVO, $lider->fresh()->estatus);
+
+        $profesor = $this->crearUsuario(User::ROLE_PROFESOR, 'PROF001');
+        $otro = $this->crearUsuario(User::ROLE_ESTUDIANTE, 'ITI001');
+        $this->actingAs($profesor)->patch(route('admin.usuarios.estatus', $otro))->assertForbidden();
+        $this->assertSame(User::ESTATUS_ACTIVO, $otro->fresh()->estatus);
+    }
 }

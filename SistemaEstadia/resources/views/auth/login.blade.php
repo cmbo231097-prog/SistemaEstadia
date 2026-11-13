@@ -13,7 +13,7 @@
             <h1>Iniciar Sesión</h1>
             <p class="subtitle">Ingrese sus credenciales registradas para acceder a su rol</p>
 
-            Muestra confirmaciones de la sesión, como el resultado de una acción previa. --}}
+            {{-- Muestra confirmaciones de la sesión, como el resultado de una acción previa. --}}
             @if (session('status'))
                 <div class="alert alert-success" role="status">{{ session('status') }}</div>
             @endif
@@ -42,9 +42,7 @@
                     <div class="input-wrap has-icon has-toggle">
                         <svg class="leading" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>
                         <input id="password" type="password" name="password" placeholder="••••••••••••" autocomplete="current-password" required>
-                        <button type="button" class="toggle-pass" data-target="password" aria-label="Mostrar contraseña">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg>
-                        </button>
+                        @include('partials.toggle-password', ['target' => 'password'])
                     </div>
                 </div>
 

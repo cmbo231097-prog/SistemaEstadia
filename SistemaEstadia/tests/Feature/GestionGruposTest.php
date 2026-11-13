@@ -179,4 +179,45 @@ class GestionGruposTest extends TestCase
         $this->actingAs($lider)->delete(route('admin.usuarios.destroy', $docente));
         $this->assertDatabaseHas('usuarios', ['id_usuario' => $docente->id_usuario, 'estatus' => User::ESTATUS_INACTIVO]);
     }
+
+    public function test_el_catalogo_de_periodos_va_de_septiembre_2023_al_periodo_vigente(): void
+    {
+        $periodos = \App\Models\Periodo::orderBy('fecha_inicio')->pluck('nombre_periodo', 'codigo_periodo');
+
+        $this->assertCount(10, $periodos);
+        $this->assertSame('Septiembre - Diciembre 2023', $periodos->first());
+        $this->assertSame('Septiembre - Diciembre 2026', $periodos->last());
+        $this->assertSame('Mayo - Agosto 2025', $periodos['2025-2']);
+        $this->assertSame(['2026-3'], \App\Models\Periodo::where('activo', 1)->pluck('codigo_periodo')->all());
+    }
+
+    public function test_las_pantallas_no_se_guardan_en_la_cache_del_navegador_y_reflejan_las_asignaturas_actuales(): void
+    {
+        $lider = User::create([
+            'matricula' => 'LIDER001',
+            'nombre' => 'Lider',
+            'apellidos' => 'Prueba',
+            'correo_institucional' => 'lider@upemor.edu.mx',
+            'password_hash' => 'password123',
+            'id_rol' => \App\Models\Role::idOCrearPorClave(User::ROLE_LIDER),
+            'estatus' => User::ESTATUS_ACTIVO,
+        ]);
+        $asignatura = Asignatura::create([
+            'clave_asignatura' => 'IID-7777',
+            'modelo_educativo' => Asignatura::MODELO_ACTUAL,
+            'nombre_asignatura' => 'Materia Temporal',
+            'programa_educativo' => 'Ingeniería en Tecnologías de la Información e Innovación Digital',
+            'cuatrimestre' => 3,
+        ]);
+
+        $this->actingAs($lider)->get(route('admin.grupos.index'))
+            ->assertOk()
+            ->assertSee('Materia Temporal')
+            ->assertHeader('Cache-Control');
+        $this->assertStringContainsString('no-store', $this->actingAs($lider)->get(route('admin.grupos.index'))->headers->get('Cache-Control'));
+
+        $asignatura->delete();
+
+        $this->actingAs($lider)->get(route('admin.grupos.index'))->assertDontSee('Materia Temporal');
+    }
 }

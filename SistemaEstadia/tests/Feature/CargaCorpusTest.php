@@ -72,7 +72,6 @@ class CargaCorpusTest extends TestCase
         $evidencia = Evidencia::create([
             'titulo' => 'Práctica 3: Árboles Binarios',
             'tipo_evidencia' => 'reporte',
-            'nivel_retroalimentacion_ia' => 'exhaustiva',
             'descripcion_entregables' => 'Reporte en PDF',
             'fecha_limite' => '2026-11-01 23:59:00',
             'id_docente' => $docente->id_usuario,
@@ -188,6 +187,30 @@ class CargaCorpusTest extends TestCase
         $this->actingAs($intruso)->get(route('corpus.ver', $doc))->assertForbidden();
         $this->actingAs($intruso)->delete(route('corpus.destroy', $doc))->assertForbidden();
         $this->actingAs($e['docente'])->get(route('corpus.ver', $doc))->assertOk();
+    }
+
+    public function test_avisa_por_que_no_se_puede_anonimizar_si_el_grupo_no_tiene_equipos(): void
+    {
+        $e = $this->escenario();
+        Equipo::where('id_grupo', $e['grupo']->id_grupo)->delete();
+
+        $this->actingAs($e['docente'])
+            ->get(route('corpus.index', ['grupo' => $e['grupo']->id_grupo, 'evidencia' => $e['evidencia']->id_evidencia]))
+            ->assertOk()
+            ->assertSee('No se puede cargar ni anonimizar documentos todavía.')
+            ->assertSee('no tiene equipos registrados: sin equipos no hay PDFs que anonimizar.')
+            ->assertSee(route('equipos.index'));
+    }
+
+    public function test_con_equipos_no_muestra_el_aviso_de_equipos_faltantes(): void
+    {
+        $e = $this->escenario();
+
+        $this->actingAs($e['docente'])
+            ->get(route('corpus.index', ['grupo' => $e['grupo']->id_grupo, 'evidencia' => $e['evidencia']->id_evidencia]))
+            ->assertOk()
+            ->assertDontSee('No se puede cargar ni anonimizar documentos todavía.')
+            ->assertSee('Esta evidencia aún no tiene PDFs cargados.');
     }
 
     public function test_sanitizar_lote_procesa_pendientes_y_la_vista_lo_muestra(): void

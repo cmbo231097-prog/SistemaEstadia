@@ -3,95 +3,80 @@
 namespace App\Services;
 
 use RuntimeException;
-use setasign\Fpdi\Fpdi;
 use Symfony\Component\Process\Process;
-use Throwable;
 
-/** Elimina la primera página (carátula institucional) de un PDF para anonimizarlo. */
+/**
+ * Elimina la primera página (carátula institucional) de un PDF para anonimizarlo.
+ * El trabajo con el PDF lo hace scripts/pdf_sanitizer.py (Python + pypdf); aquí solo se invoca.
+ */
 class PdfSanitizer
 {
     /** @return int Páginas del PDF resultante. */
     public function sanitizar(string $origen, string $destino): int
     {
-        try {
-            return $this->recortar($origen, $destino);
-        } catch (Throwable $e) {
-            // PDFs con referencias comprimidas (1.5+): se normalizan con Ghostscript si está instalado.
-            $normalizado = $this->normalizarConGhostscript($origen);
-            if ($normalizado === null) {
-                throw $e;
-            }
-            try {
-                return $this->recortar($normalizado, $destino);
-            } finally {
-                @unlink($normalizado);
-            }
-        }
+        return (int) ($this->ejecutar(['sanitizar', $origen, $destino])['paginas'] ?? 0);
     }
 
     public function contarPaginas(string $ruta): ?int
     {
+        return $this->contarPaginasLote([$ruta])[$ruta] ?? null;
+    }
+
+    /**
+     * Cuenta las páginas de varios PDFs con un solo proceso de Python.
+     *
+     * @param  array<int, string>  $rutas
+     * @return array<string, int|null> Ruta => páginas (null si el archivo no se pudo leer o no existe).
+     */
+    public function contarPaginasLote(array $rutas): array
+    {
+        $rutas = array_values(array_unique($rutas));
+        if ($rutas === []) {
+            return [];
+        }
+
         try {
-            return (new Fpdi())->setSourceFile($ruta);
-        } catch (Throwable) {
-            $normalizado = $this->normalizarConGhostscript($ruta);
-            if ($normalizado === null) {
-                return null;
-            }
-            try {
-                return (new Fpdi())->setSourceFile($normalizado);
-            } catch (Throwable) {
-                return null;
-            } finally {
-                @unlink($normalizado);
-            }
+            $paginas = $this->ejecutar(['contar', ...$rutas])['paginas'] ?? [];
+        } catch (RuntimeException $e) {
+            report($e);
+
+            return array_fill_keys($rutas, null);
         }
+
+        return array_map(fn ($valor) => is_int($valor) ? $valor : null, $paginas) + array_fill_keys($rutas, null);
     }
 
-    private function recortar(string $origen, string $destino): int
+    /**
+     * @param  array<int, string>  $argumentos
+     * @return array<string, mixed>
+     *
+     * @throws RuntimeException
+     */
+    private function ejecutar(array $argumentos): array
     {
-        $pdf = new Fpdi();
-        $total = $pdf->setSourceFile($origen);
-
-        if ($total < 2) {
-            throw new RuntimeException('El PDF solo tiene una página; al suprimir la portada no quedaría contenido.');
-        }
-
-        for ($pagina = 2; $pagina <= $total; $pagina++) {
-            $plantilla = $pdf->importPage($pagina);
-            $tamano = $pdf->getTemplateSize($plantilla);
-            $pdf->AddPage($tamano['orientation'], [$tamano['width'], $tamano['height']]);
-            $pdf->useTemplate($plantilla);
-        }
-
-        $pdf->Output('F', $destino);
-
-        return $total - 1;
-    }
-
-    private function normalizarConGhostscript(string $origen): ?string
-    {
-        $salida = tempnam(sys_get_temp_dir(), 'corpus_').'.pdf';
         $proceso = new Process([
-            'gs', '-q', '-dNOPAUSE', '-dBATCH', '-dSAFER', '-sDEVICE=pdfwrite',
-            '-dCompatibilityLevel=1.4', '-sOutputFile='.$salida, $origen,
+            config('services.python.binary'),
+            config('services.python.sanitizer_script'),
+            ...$argumentos,
         ]);
-        $proceso->setTimeout(60);
+        $proceso->setTimeout((float) config('services.python.timeout'));
 
         try {
             $proceso->run();
-        } catch (Throwable) {
-            @unlink($salida);
-
-            return null;
+        } catch (\Throwable $e) {
+            throw new RuntimeException('No se pudo ejecutar Python para procesar el PDF: '.$e->getMessage(), 0, $e);
         }
 
-        if (! $proceso->isSuccessful() || ! is_file($salida) || filesize($salida) === 0) {
-            @unlink($salida);
-
-            return null;
+        $respuesta = json_decode($proceso->getOutput(), true);
+        if (! is_array($respuesta)) {
+            // Sin JSON suele indicar que falta Python o el módulo pypdf (ver scripts/requirements.txt).
+            $detalle = trim($proceso->getErrorOutput());
+            throw new RuntimeException('Python no devolvió un resultado válido: '.($detalle !== '' ? $detalle : 'sin detalle'));
+        }
+        if (! $proceso->isSuccessful() || isset($respuesta['error'])) {
+            throw new RuntimeException((string) ($respuesta['error'] ?? 'No se pudo procesar el PDF.'));
         }
 
-        return $salida;
+        return $respuesta;
     }
 }

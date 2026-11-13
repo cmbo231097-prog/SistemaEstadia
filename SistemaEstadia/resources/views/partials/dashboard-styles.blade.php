@@ -28,6 +28,18 @@
     .btn-green { background:var(--green); }
     .btn-orange { background:var(--orange); }
     .btn-indigo { background:var(--indigo); }
+    .btn:focus-visible, .btn-outline:focus-visible { outline:3px solid #93b4ff; outline-offset:2px; }
+    .btn:disabled { opacity:.5; cursor:not-allowed; filter:none; }
+    /* Botón secundario: fondo blanco, texto y borde oscuros para que siempre sea legible. */
+    .btn-outline {
+        display:inline-flex; align-items:center; justify-content:center; gap:6px;
+        background:#fff; color:var(--navy); border:1.5px solid var(--navy); border-radius:8px;
+        padding:11px 16px; font-size:13px; font-weight:700; text-decoration:none; cursor:pointer;
+        flex:0 0 auto; max-width:none; transition:background .15s;
+    }
+    .btn-outline:hover { background:var(--info-bg); filter:none; }
+    .btn-outline-danger { color:var(--bad-fg); border-color:var(--bad-fg); }
+    .btn-outline-danger:hover { background:var(--bad-bg); }
 
     /* Tabla */
     .section-title { margin:0 0 12px; font-size:16px; font-weight:800; }

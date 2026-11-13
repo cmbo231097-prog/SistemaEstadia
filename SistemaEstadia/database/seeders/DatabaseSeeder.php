@@ -36,11 +36,13 @@ class DatabaseSeeder extends Seeder
                     'matricula' => $matricula,
                     'nombre' => $nombre,
                     'apellidos' => $apellidos,
-                    'password_hash' => '12345678',
+                    'password_hash' => 'Demo2026!',
                     'id_rol' => Role::idOCrearPorClave($clave),
                     'estatus' => User::ESTATUS_ACTIVO,
                 ]
             );
         }
+
+        $this->call(DemoDataSeeder::class);
     }
 }

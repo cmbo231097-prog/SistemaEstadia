@@ -45,7 +45,7 @@
         <span class="actions-label">Acciones del Docente:</span>
         <button type="button" class="btn btn-navy" data-soon="Subir PDFs (Corpus)">📤 Subir PDFs (Corpus)</button>
         <button type="button" class="btn btn-indigo" data-soon="Calificar Pendientes">✍️ Calificar Pendientes</button>
-        <button type="button" class="btn btn-green" data-soon="Reporte de Rendimiento Grupal (.xlsx)">📥 Rep. Rendimiento (.xlsx)</button>
+        <a href="{{ route('rendimiento-grupal.index') }}" class="btn btn-green" style="text-decoration:none">📥 Rep. Rendimiento (.xlsx)</a>
     </section>
 
     {{-- Tabla de seguimiento --}}

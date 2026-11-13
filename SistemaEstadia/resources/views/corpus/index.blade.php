@@ -8,6 +8,9 @@
     .alert { padding:12px 16px; border-radius:10px; font-size:13px; margin-bottom:16px; border:1px solid; }
     .alert-ok { background:var(--ok-bg); color:var(--ok-fg); border-color:#a7e3bd; }
     .alert-err { background:var(--bad-bg); color:var(--bad-fg); border-color:#f3b4b4; }
+    .alert-warn { background:#fffaf0; color:#7a4b00; border-color:#f1c27d; }
+    .alert-warn a { color:inherit; font-weight:700; }
+    .batch-hint { flex-basis:100%; margin:0; font-size:12px; color:#7a4b00; }
     .alert ul { margin:0; padding-left:18px; }
 
     .selectors { display:grid; grid-template-columns:repeat(3, 1fr); gap:14px; padding:14px 16px; margin-bottom:16px; }
@@ -72,15 +75,23 @@
         $total = $documentos->count();
         $sanitizados = $documentos->where('estado_sanitizacion', 'sanitizado')->count();
         $porProcesar = $total - $sanitizados;
-        $listo = $total > 0 && $porProcesar === 0;
         $puedeSubir = $evidencia && $equipos->isNotEmpty();
+        $sinEquipos = $grupo && $evidencia && $equipos->isEmpty();
+        // Motivo por el que no se puede sanitizar, mostrado junto al botón.
+        $motivoSinLote = match (true) {
+            $sinEquipos => "El grupo {$grupo->clave_grupo} no tiene equipos registrados: sin equipos no hay PDFs que anonimizar.",
+            ! $evidencia => 'Selecciona una evidencia para poder sanitizar sus PDFs.',
+            $total === 0 => 'Esta evidencia aún no tiene PDFs cargados. Sube los archivos para poder sanitizarlos.',
+            $porProcesar === 0 => 'Todos los PDFs de esta evidencia ya están sanitizados.',
+            default => null,
+        };
     @endphp
 
     <h1 class="page-title">Carga y Sanitización de Corpus Documental</h1>
     <p class="page-sub">Subida masiva de evidencias académicas en PDF, recorte automático de carátula para anonimización y preparación de corpus</p>
 
     @if (session('status'))
-        <div class="alert alert-ok" role="status">{{ session('status') }}</div>
+        <div class="alert alert-ok" role="status" data-autocierre>{{ session('status') }}</div>
     @endif
     @if (session('error'))
         <div class="alert alert-err" role="alert">{{ session('error') }}</div>
@@ -91,6 +102,13 @@
         </div>
     @endif
     <div class="alert alert-err" role="alert" id="formatoAlert" hidden></div>
+    @if ($sinEquipos)
+        <div class="alert alert-warn" role="alert" id="avisoSinEquipos">
+            <strong>No se puede cargar ni anonimizar documentos todavía.</strong>
+            El grupo {{ $grupo->clave_grupo }} no tiene equipos registrados y cada PDF debe asociarse a un equipo.
+            <a href="{{ route('equipos.index') }}">Registra los equipos del grupo</a> para habilitar la carga y la sanitización.
+        </div>
+    @endif
 
     <form method="GET" action="{{ route('corpus.index') }}" class="panel selectors">
         <select name="asignatura" class="field-control" aria-label="Asignatura" onchange="this.form.grupo.value='';this.form.evidencia.value='';this.form.submit()">
@@ -160,10 +178,19 @@
                 @csrf
                 <input type="hidden" name="id_evidencia" value="{{ $evidencia?->id_evidencia }}">
                 <input type="hidden" name="id_grupo" value="{{ $grupo?->id_grupo }}">
-                <button type="submit" class="btn btn-blue" @disabled($porProcesar === 0)>✂️ Sanitizar Lote Completo</button>
+                <button type="submit" class="btn btn-blue" @disabled($porProcesar === 0) @if ($motivoSinLote) title="{{ $motivoSinLote }}" aria-describedby="motivoSinLote" @endif>✂️ Sanitizar Lote Completo</button>
             </form>
-            <button type="button" class="btn btn-green" data-soon="Enviar a Evaluación con IA" @disabled(! $listo)>🚀 Enviar a Evaluación con IA</button>
+            @if ($evidencia)
+                <a href="{{ route('evaluacion-ia.index', ['asignatura' => $asignatura?->id_asignatura, 'grupo' => $grupo?->id_grupo, 'evidencia' => $evidencia->id_evidencia]) }}"
+                    class="btn btn-green" style="text-decoration:none">🚀 Ir a Evaluación con IA</a>
+            @endif
+            @if ($evidencia && $evidencia->criteriosRubrica->where('evaluable_ia', true)->isEmpty())
+                <small>Sin rúbrica no se puede evaluar con IA: <a href="{{ route('evidencias.rubrica', $evidencia) }}">configúrala aquí</a> o impórtala desde Evaluación Docente.</small>
+            @endif
         </div>
+        @if ($motivoSinLote)
+            <p class="batch-hint" id="motivoSinLote">ℹ️ {{ $motivoSinLote }}</p>
+        @endif
     </section>
 
     <section class="panel table-card" aria-label="Corpus cargado">
@@ -175,6 +202,7 @@
                         <th scope="col" class="center">Equipo Asignado</th>
                         <th scope="col" class="center">Páginas</th>
                         <th scope="col" class="center">Estado de Sanitización</th>
+                        <th scope="col">Evaluación cuantitativa y cualitativa</th>
                         <th scope="col" class="center">Acciones</th>
                     </tr>
                 </thead>
@@ -191,6 +219,31 @@
                                     <span class="state s-bad">✕ Error al sanitizar</span>
                                 @else
                                     <span class="state s-wait">⏳ Pendiente de recorte</span>
+                                @endif
+                            </td>
+                            <td>
+                                @if ($doc->ultimaEvaluacionIa)
+                                    <strong>{{ number_format((float) $doc->ultimaEvaluacionIa->calificacion_global, 2) }} / {{ \App\Models\CriterioRubrica::PUNTAJE_TOTAL }}</strong>
+                                    <details>
+                                        <summary>Ver retroalimentación y criterios</summary>
+                                        <p>{{ $doc->ultimaEvaluacionIa->retroalimentacion_cualitativa }}</p>
+                                        <ul>
+                                            @foreach ($doc->ultimaEvaluacionIa->criterios as $detalle)
+                                                <li>
+                                                    <strong>{{ $detalle->criterio?->nombre_criterio ?? 'Criterio' }}:
+                                                        {{ number_format((float) $detalle->calificacion, 2) }}
+                                                        / {{ number_format((float) ($detalle->criterio?->puntaje_maximo ?? 0), 2) }}</strong>
+                                                    @if ($detalle->retroalimentacion)
+                                                        — {{ $detalle->retroalimentacion }}
+                                                    @endif
+                                                </li>
+                                            @endforeach
+                                        </ul>
+                                        <small>Modelo {{ $doc->ultimaEvaluacionIa->modelo_llm }} ·
+                                            {{ $doc->ultimaEvaluacionIa->fecha_procesamiento?->format('d/m/Y H:i') }}</small>
+                                    </details>
+                                @else
+                                    <span class="state s-wait">Sin evaluación registrada</span>
                                 @endif
                             </td>
                             <td class="center table-actions">
@@ -216,14 +269,14 @@
                             </td>
                         </tr>
                     @empty
-                        <tr><td colspan="5" class="empty">Aún no hay PDFs cargados para esta evidencia.</td></tr>
+                        <tr><td colspan="6" class="empty">Aún no hay PDFs cargados para esta evidencia.</td></tr>
                     @endforelse
                 </tbody>
             </table>
         </div>
     </section>
 
-    <div class="info-note">ℹ️ La sanitización remueve automáticamente la primera hoja (carátula institucional) de cada PDF para desasociar la identidad de los estudiantes antes de consultar la API externa.</div>
+    <div class="info-note">ℹ️ Antes de enviar el archivo a Gemini, verifica que las páginas posteriores a la portada no contengan nombres, matrículas u otros datos identificables. La sanitización actual elimina la primera hoja, pero no detecta datos personales dentro del resto del documento.</div>
 @endsection
 
 @section('scripts')

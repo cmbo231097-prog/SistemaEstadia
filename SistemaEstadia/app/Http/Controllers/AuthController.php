@@ -4,7 +4,9 @@ namespace App\Http\Controllers;
 
 use App\Models\Role;
 use App\Models\User;
+use App\Services\AvisosCorreoService;
 use Illuminate\Auth\Events\PasswordReset;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cookie;
@@ -16,9 +18,13 @@ use Laravel\Socialite\Facades\Socialite;
 
 class AuthController extends Controller
 {
+    /** Cookie opcional para recordar el correo, sin persistir la sesión del usuario. */
     private const REMEMBER_COOKIE = 'remembered_email';
+
+    /** Dominio permitido para las cuentas institucionales. */
     private const INSTITUTIONAL_DOMAIN = '@upemor.edu.mx';
 
+    /** Muestra el formulario y precarga el correo guardado, si existe. */
     public function showLoginForm(Request $request)
     {
         return view('auth.login', [
@@ -26,6 +32,7 @@ class AuthController extends Controller
         ]);
     }
 
+    /** Valida las credenciales, inicia una sesión segura y guarda la preferencia del correo. */
     public function login(Request $request)
     {
         $credentials = $request->validate([
@@ -37,6 +44,7 @@ class AuthController extends Controller
             'password.required' => 'Ingresa tu contraseña.',
         ]);
 
+        // El correo se normaliza y solo se autentican cuentas activas.
         $attempt = [
             'correo_institucional' => Str::lower(trim($credentials['email'])),
             'password' => $credentials['password'],
@@ -50,7 +58,9 @@ class AuthController extends Controller
             ]);
         }
 
+        // Renovar el ID de sesión evita reutilizar el identificador previo a la autenticación.
         $request->session()->regenerate();
+        app(AvisosCorreoService::class)->inicioDeSesion(Auth::user(), $request);
 
         // "Recordar mi usuario" solo guarda el correo; la sesión siempre expira por inactividad.
         if ($request->boolean('remember')) {
@@ -62,42 +72,64 @@ class AuthController extends Controller
         return redirect()->intended(route('dashboard'));
     }
 
+    /** Presenta el formulario de alta de una cuenta de estudiante. */
     public function showRegisterForm()
     {
         return view('auth.register');
     }
 
+    /** Crea una cuenta activa con rol Estudiante después de validar los datos de registro. */
     public function register(Request $request)
     {
+        // Se normaliza el correo antes de comprobar su dominio y unicidad.
         $request->merge(['email' => Str::lower(trim((string) $request->input('email')))]);
 
         $data = $request->validate([
             'nombres' => ['required', 'string', 'max:60'],
             'apellidos' => ['required', 'string', 'max:80'],
-            'matricula' => ['required', 'string', 'max:20', 'unique:usuarios,matricula'],
-            'email' => ['required', 'email', 'max:120', 'ends_with:'.self::INSTITUTIONAL_DOMAIN, 'unique:usuarios,correo_institucional'],
+            'matricula' => ['required', 'string', 'max:20'],
+            'email' => ['required', 'email', 'max:120', 'ends_with:'.self::INSTITUTIONAL_DOMAIN],
             'password' => ['required', 'confirmed', PasswordRule::min(8)->mixedCase()->numbers()->symbols()],
             'terms' => ['accepted'],
         ], $this->passwordMessages());
 
-        User::create([
-            'matricula' => $data['matricula'],
-            'nombre' => $data['nombres'],
-            'apellidos' => $data['apellidos'],
-            'correo_institucional' => $data['email'],
-            'password_hash' => $data['password'],
-            'id_rol' => Role::idOCrearPorClave(User::ROLE_ESTUDIANTE),
-            'estatus' => User::ESTATUS_ACTIVO,
-        ]);
+        // El duplicado se informa sin indicar qué dato coincide para no revelar qué matrículas o correos existen.
+        $duplicado = $this->usuarioYaRegistrado($data['matricula'], $data['email']);
+
+        if (! $duplicado) {
+            try {
+                // El modelo User se encarga de guardar la contraseña con el hash configurado.
+                User::create([
+                    'matricula' => $data['matricula'],
+                    'nombre' => $data['nombres'],
+                    'apellidos' => $data['apellidos'],
+                    'correo_institucional' => $data['email'],
+                    'password_hash' => $data['password'],
+                    'id_rol' => Role::idOCrearPorClave(User::ROLE_ESTUDIANTE),
+                    'estatus' => User::ESTATUS_ACTIVO,
+                ]);
+            } catch (UniqueConstraintViolationException) {
+                // Otra solicitud pudo registrar los mismos datos entre la comprobación y el guardado.
+                $duplicado = true;
+            }
+        }
+
+        if ($duplicado) {
+            return back()->withInput($request->except('password', 'password_confirmation'))->withErrors([
+                'registro' => 'Ya existe un usuario registrado con los datos proporcionados.',
+            ]);
+        }
 
         return redirect()->route('login')->with('status', 'Cuenta creada correctamente. Ya puedes iniciar sesión.');
     }
 
+    /** Muestra el formulario para solicitar un enlace de recuperación. */
     public function showForgotForm()
     {
         return view('auth.forgot-password');
     }
 
+    /** Solicita el enlace de recuperación para una cuenta institucional activa. */
     public function sendResetLink(Request $request)
     {
         $request->validate([
@@ -110,33 +142,24 @@ class AuthController extends Controller
         $correo = Str::lower(trim($request->input('email')));
         $user = User::where('correo_institucional', $correo)->first();
 
-        if (! $user || ! $user->isActivo()) {
-            return back()->withInput()->withErrors([
-                'email' => 'Este correo no está registrado en el sistema.',
-            ]);
-        }
-
-        try {
-            $status = Password::sendResetLink(['correo_institucional' => $correo]);
-        } catch (\Throwable $e) {
-            report($e);
-
-            return back()->withInput()->withErrors([
-                'email' => 'No fue posible enviar el correo en este momento. Inténtalo más tarde.',
-            ]);
-        }
-
-        if ($status === Password::RESET_THROTTLED) {
-            return back()->withInput()->withErrors([
-                'email' => 'Ya enviamos un enlace hace un momento. Espera un minuto para solicitar otro.',
-            ]);
+        // La respuesta es idéntica exista o no la cuenta, para no revelar qué correos están registrados.
+        // No se envían enlaces a cuentas inexistentes o inactivas.
+        if ($user && $user->isActivo()) {
+            try {
+                // El broker de Laravel genera el token y controla su vigencia y frecuencia de envío.
+                Password::sendResetLink(['correo_institucional' => $correo]);
+            } catch (\Throwable $e) {
+                // El fallo solo se registra: mostrarlo distinguiría las cuentas existentes de las que no existen.
+                report($e);
+            }
         }
 
         return redirect()->route('password.request')
-            ->with('status', 'Enviamos un enlace de recuperación a '.$correo.'. Expira en 15 minutos; revisa también tu carpeta de Spam.')
+            ->with('status', 'Si el correo está registrado, recibirás un enlace de recuperación. Expira en 15 minutos; revisa también tu carpeta de Spam.')
             ->with('enviado', true);
     }
 
+    /** Comprueba el token antes de mostrar la pantalla para definir una nueva contraseña. */
     public function showResetForm(Request $request, string $token)
     {
         $email = Str::lower(trim((string) $request->query('email')));
@@ -148,12 +171,14 @@ class AuthController extends Controller
             ]);
         }
 
+        // El formulario recibe el correo y token ya verificados para completar el restablecimiento.
         return view('auth.reset-password', [
             'token' => $token,
             'email' => $email,
         ]);
     }
 
+    /** Actualiza la contraseña mediante el broker y notifica el evento de restablecimiento. */
     public function resetPassword(Request $request)
     {
         $request->validate([
@@ -162,6 +187,7 @@ class AuthController extends Controller
             'password' => ['required', 'confirmed', PasswordRule::min(8)->mixedCase()->numbers()->symbols()],
         ], $this->passwordMessages());
 
+        // El broker valida el token y ejecuta el callback solo si el enlace sigue siendo válido.
         $status = Password::reset(
             [
                 'correo_institucional' => Str::lower(trim($request->input('email'))),
@@ -185,6 +211,7 @@ class AuthController extends Controller
         return redirect()->route('login')->with('status', 'Contraseña actualizada. Ya puedes iniciar sesión.');
     }
 
+    /** Inicia el flujo OAuth de Google si las credenciales del proveedor están configuradas. */
     public function redirectToGoogle()
     {
         if (! config('services.google.client_id') || ! config('services.google.client_secret')) {
@@ -196,16 +223,19 @@ class AuthController extends Controller
         return $this->googleDriver()->with(['hd' => 'upemor.edu.mx'])->redirect();
     }
 
+    /** Valida la identidad institucional recibida y asocia o crea la cuenta local correspondiente. */
     public function handleGoogleCallback(Request $request)
     {
         try {
             $googleUser = $this->googleDriver()->user();
         } catch (\Throwable $e) {
+            // La respuesta pública es genérica; el detalle del fallo OAuth no se expone al usuario.
             return redirect()->route('login')->withErrors([
                 'email' => 'No fue posible iniciar sesión con Google. Inténtalo de nuevo.',
             ]);
         }
 
+        // El parámetro hd de Google orienta el inicio de sesión, pero el dominio también se valida aquí.
         $email = Str::lower((string) $googleUser->getEmail());
         if (! str_ends_with($email, self::INSTITUTIONAL_DOMAIN)) {
             return redirect()->route('login')->withErrors([
@@ -213,6 +243,7 @@ class AuthController extends Controller
             ]);
         }
 
+        // Se busca primero por identificador de Google y luego por correo institucional ya registrado.
         $user = User::where('google_id', $googleUser->getId())->orWhere('correo_institucional', $email)->first();
 
         // Primer acceso con Google: se crea la cuenta con rol Estudiante.
@@ -237,22 +268,26 @@ class AuthController extends Controller
             ]);
         }
 
+        // Las cuentas inactivas no pueden iniciar sesión aunque Google autentique correctamente al usuario.
         if (! $user->isActivo()) {
             return redirect()->route('login')->withErrors([
                 'email' => 'Tu cuenta está inactiva. Contacta al administrador.',
             ]);
         }
 
+        // Vincula el identificador de Google a una cuenta existente que aún no tenía esa asociación.
         if (! $user->google_id) {
             $user->forceFill(['google_id' => $googleUser->getId()])->save();
         }
 
         Auth::login($user);
         $request->session()->regenerate();
+        app(AvisosCorreoService::class)->inicioDeSesion($user, $request);
 
         return redirect()->intended(route('dashboard'));
     }
 
+    /** Cierra la autenticación y limpia los datos de sesión para evitar reutilización. */
     public function logout(Request $request)
     {
         Auth::logout();
@@ -263,19 +298,30 @@ class AuthController extends Controller
         return redirect()->route('login');
     }
 
-    // El redirect se arma con el host actual; debe coincidir con el registrado en Google Cloud.
+    /**
+     * Configura Socialite con la URL de retorno generada para el host actual.
+     * Esta URL debe coincidir con la registrada en la configuración OAuth de Google.
+     */
     private function googleDriver()
     {
         return Socialite::driver('google')->redirectUrl(route('auth.google.callback'));
     }
 
+    private function usuarioYaRegistrado(string $matricula, string $correo): bool
+    {
+        return User::query()
+            ->where('matricula', $matricula)
+            ->orWhere('correo_institucional', $correo)
+            ->exists();
+    }
+
+    /** Centraliza los mensajes en español usados por las reglas de validación de contraseñas y registro. */
     private function passwordMessages(): array
     {
         return [
             'required' => 'Este campo es obligatorio.',
             'email' => 'Ingresa un correo electrónico válido.',
             'max' => 'El valor ingresado es demasiado largo.',
-            'unique' => 'Este dato ya está registrado en el sistema.',
             'confirmed' => 'Las contraseñas no coinciden.',
             'accepted' => 'Debes aceptar los términos de uso y el Aviso de Privacidad.',
             'email.ends_with' => 'Usa tu correo institucional (@upemor.edu.mx).',

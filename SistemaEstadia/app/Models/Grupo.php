@@ -4,11 +4,14 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Grupo extends Model
 {
     protected $table = 'grupos';
+
     protected $primaryKey = 'id_grupo';
+
     public $timestamps = false;
 
     protected $fillable = [
@@ -31,5 +34,10 @@ class Grupo extends Model
     public function periodo(): BelongsTo
     {
         return $this->belongsTo(Periodo::class, 'id_periodo', 'id_periodo');
+    }
+
+    public function equipos(): HasMany
+    {
+        return $this->hasMany(Equipo::class, 'id_grupo', 'id_grupo');
     }
 }

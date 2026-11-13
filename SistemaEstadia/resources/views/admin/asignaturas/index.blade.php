@@ -46,7 +46,6 @@
     .mf-field label { display:block; font-size:12px; font-weight:700; margin-bottom:5px; }
     .mf-field.invalid .field-control { border-color:#dc2626; }
     .mf-error { color:#b91c1c; font-size:11.5px; margin-top:4px; }
-    .mf-info { background:#f8fafc; border:1px solid var(--border); border-radius:8px; padding:10px 12px; font-size:11.5px; color:var(--muted); }
     .mf-foot { display:flex; justify-content:flex-end; gap:10px; padding:14px 22px; border-top:1px solid var(--border); flex-wrap:wrap; }
     .mf-foot button { border-radius:8px; padding:10px 22px; font-size:13px; font-weight:700; border:1px solid var(--border); }
     .mf-cancel { background:#fff; color:#334155; }
@@ -70,7 +69,7 @@
 
     {{-- Mensajes de resultado de las operaciones de alta, edición y eliminación. --}}
     @if (session('status'))
-        <div class="alert alert-ok" role="status">{{ session('status') }}</div>
+        <div class="alert alert-ok" role="status" data-autocierre>{{ session('status') }}</div>
     @endif
     @if (session('error'))
         <div class="alert alert-err" role="alert">{{ session('error') }}</div>
@@ -214,7 +213,6 @@
                     <div class="mf-field {{ $err('modelo_educativo') ? 'invalid' : '' }}">
                         <label for="aModelo">Modelo Educativo *</label>
                         <select id="aModelo" name="modelo_educativo" class="field-control" required>
-                            <option value="">Selecciona un modelo</option>
                             @foreach ($modelos as $claveModelo => $nombreModelo)
                                 <option value="{{ $claveModelo }}" @selected(old('modelo_educativo', 'actual') === $claveModelo)>{{ $nombreModelo }}</option>
                             @endforeach
@@ -234,11 +232,9 @@
                     <div class="mf-field mf-full {{ $err('programa_educativo') ? 'invalid' : '' }}">
                         <label for="aPrograma">Programa Educativo (Carrera) *</label>
                         <select id="aPrograma" name="programa_educativo" class="field-control" required>
-                            <option value="">Selecciona una carrera</option>
                         </select>
                         @if ($err('programa_educativo'))<div class="mf-error">{{ $err('programa_educativo') }}</div>@endif
                     </div>
-                    <div class="mf-full mf-info">ℹ️ Las carreras disponibles dependen del modelo educativo seleccionado. La clave se genera con su abreviatura y el consecutivo interno.</div>
                 </div>
             </div>
             <div class="mf-foot">
@@ -266,12 +262,13 @@
             // Reconstruye las opciones de carrera para que correspondan al modelo seleccionado.
             function poblarProgramas(modelo, seleccionado = '') {
                 const selector = $('aPrograma');
-                selector.replaceChildren(new Option('Selecciona una carrera', ''));
+                selector.replaceChildren();
                 Object.entries(programasPorModelo[modelo] || {}).forEach(([abreviatura, programa]) => {
                     const etiqueta = abreviatura === 'LAG' ? 'LAG / LAE' : abreviatura;
                     selector.add(new Option(`${etiqueta} — ${programa}`, programa));
                 });
                 selector.value = seleccionado;
+                if (selector.selectedIndex < 0) selector.selectedIndex = 0;
             }
 
             // Configura la acción y los campos ocultos del formulario según la operación elegida.
@@ -350,9 +347,11 @@
             // Permite cerrar el diálogo con sus controles, al hacer clic fuera o con Escape.
             $('asignaturaModalClose').addEventListener('click', cerrar);
             $('asignaturaModalCancel').addEventListener('click', cerrar);
-            overlay.addEventListener('click', (event) => { if (event.target === overlay) cerrar(); });
+            // Clic fuera del cuadro o Escape piden confirmación si hay datos sin guardar.
+            const intentarCerrar = protegerModal(overlay, form, cerrar);
+            overlay.addEventListener('click', (event) => { if (event.target === overlay) intentarCerrar(); });
             document.addEventListener('keydown', (event) => {
-                if (event.key === 'Escape' && overlay.classList.contains('open')) cerrar();
+                if (event.key === 'Escape' && overlay.classList.contains('open')) intentarCerrar();
             });
 
             // Evita envíos inválidos y bloquea el botón para prevenir envíos duplicados.

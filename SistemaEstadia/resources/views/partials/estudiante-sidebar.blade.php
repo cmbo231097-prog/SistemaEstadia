@@ -3,11 +3,11 @@
     // Solo el panel tiene ruta por ahora; el resto de módulos se conectarán más adelante.
     $menu = [
         'Consulta Estudiantil' => [
-            ['icon' => '📊', 'label' => 'Panel de Calificaciones', 'route' => 'dashboard', 'active' => true],
+            ['icon' => '📊', 'label' => 'Panel de Calificaciones', 'route' => 'dashboard', 'active' => request()->routeIs('dashboard')],
             ['icon' => '👥', 'label' => 'Mi Equipo y Materias'],
         ],
         'Reportes y Contraste' => [
-            ['icon' => '📄', 'label' => 'Mi Reporte de Contraste (PDF)'],
+            ['icon' => '📄', 'label' => 'Mi Reporte de Contraste (PDF)', 'route' => 'contraste.index', 'active' => request()->routeIs('contraste.*')],
         ],
     ];
 @endphp

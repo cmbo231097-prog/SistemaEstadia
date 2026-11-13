@@ -1,8 +1,11 @@
 <?php
+
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class CorpusDocumento extends Model
 {
@@ -41,6 +44,28 @@ class CorpusDocumento extends Model
     public function equipo(): BelongsTo
     {
         return $this->belongsTo(Equipo::class, 'id_equipo', 'id_equipo');
+    }
+
+    public function evaluacionesIa(): HasMany
+    {
+        return $this->hasMany(EvaluacionIa::class, 'id_corpus', 'id_corpus');
+    }
+
+    public function ultimaEvaluacionIa(): HasOne
+    {
+        return $this->hasOne(EvaluacionIa::class, 'id_corpus', 'id_corpus')->latestOfMany('id_eval_ia');
+    }
+
+    // Evaluación humana registrada para el documento, si existe.
+    public function evaluacionDocente(): HasOne
+    {
+        return $this->hasOne(EvaluacionDocente::class, 'id_corpus', 'id_corpus');
+    }
+
+    // Métricas del cruce IA vs. docente, si ya se calcularon.
+    public function comparativa(): HasOne
+    {
+        return $this->hasOne(EvaluacionComparativa::class, 'id_corpus', 'id_corpus');
     }
 
     // Indica si el estado actual confirma que el archivo ya fue sanitizado.

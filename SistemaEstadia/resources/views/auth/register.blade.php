@@ -15,7 +15,7 @@
             <p class="subtitle">Completa el formulario para acceder al sistema y consultar tus evaluaciones</p>
 
             @if ($errors->any())
-                <div class="alert alert-error" role="alert">Revisa los campos marcados e inténtalo de nuevo.</div>
+                <div class="alert alert-error" role="alert">{{ $errors->first('registro') ?: 'Revisa los campos marcados e inténtalo de nuevo.' }}</div>
             @endif
 
             <form method="POST" action="{{ route('register.submit') }}" novalidate>
@@ -56,18 +56,20 @@
                 <div class="grid-2">
                     <div class="field">
                         <label class="lbl" for="password">Contraseña *</label>
-                        <div class="input-wrap has-icon">
+                        <div class="input-wrap has-icon has-toggle">
                             {!! $lockIcon !!}
                             <input id="password" type="password" name="password" placeholder="••••••••••••" autocomplete="new-password" @class(['invalid' => $errors->has('password')]) required>
+                            @include('partials.toggle-password', ['target' => 'password'])
                         </div>
                         @error('password')<div class="field-error">{{ $message }}</div>@enderror
                     </div>
 
                     <div class="field">
                         <label class="lbl" for="password_confirmation">Confirmar contraseña *</label>
-                        <div class="input-wrap has-icon">
+                        <div class="input-wrap has-icon has-toggle">
                             {!! $lockIcon !!}
                             <input id="password_confirmation" type="password" name="password_confirmation" placeholder="••••••••••••" autocomplete="new-password" required>
+                            @include('partials.toggle-password', ['target' => 'password_confirmation'])
                         </div>
                     </div>
                 </div>

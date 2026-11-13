@@ -164,21 +164,7 @@
 
             input.invalid { border-color:var(--danger); }
 
-            .toggle-pass {
-                position:absolute;
-                right:8px;
-                top:50%;
-                transform:translateY(-50%);
-                background:none;
-                border:none;
-                cursor:pointer;
-                padding:6px;
-                color:#64748b;
-                display:grid;
-                place-items:center;
-            }
-
-            .toggle-pass svg { width:18px; height:18px; }
+            @include('partials.toggle-password-styles')
 
             .btn {
                 display:block;
@@ -308,15 +294,6 @@
             @yield('content')
         </main>
 
-        <script>
-            document.querySelectorAll('.toggle-pass').forEach(function (btn) {
-                btn.addEventListener('click', function () {
-                    var input = document.getElementById(btn.dataset.target);
-                    var show = input.type === 'password';
-                    input.type = show ? 'text' : 'password';
-                    btn.setAttribute('aria-label', show ? 'Ocultar contraseña' : 'Mostrar contraseña');
-                });
-            });
-        </script>
+        @include('partials.toggle-password-script')
     </body>
 </html>

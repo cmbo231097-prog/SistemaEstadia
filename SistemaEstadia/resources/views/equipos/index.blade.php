@@ -37,7 +37,7 @@
 
     .member-count { display:inline-block; padding:5px 11px; border-radius:999px; background:var(--ok-bg); color:var(--ok-fg); font-size:11.5px; font-weight:700; white-space:nowrap; }
     .member-row { display:flex; gap:8px; align-items:center; margin-bottom:10px; }
-    .member-row select { flex:1; }
+    .member-row select { flex:1 1 0; min-width:0; }
     .member-remove { background:#fff; border:1px solid var(--border); color:var(--bad-fg); border-radius:8px; padding:9px 12px; font-size:12px; font-weight:700; }
     .member-add { background:#fff; border:1px dashed var(--blue); color:var(--blue); border-radius:8px; padding:9px 14px; font-size:12.5px; font-weight:700; width:100%; }
     .member-add:disabled { opacity:.5; cursor:not-allowed; }
@@ -76,7 +76,7 @@
     <p class="page-sub">Organización de los estudiantes en equipos de {{ $min }} a {{ $max }} integrantes para la realización y evaluación de evidencias académicas</p>
 
     @if (session('status'))
-        <div class="alert alert-ok" role="status">{{ session('status') }}</div>
+        <div class="alert alert-ok" role="status" data-autocierre>{{ session('status') }}</div>
     @endif
     @if (session('error'))
         <div class="alert alert-err" role="alert">{{ session('error') }}</div>
@@ -182,7 +182,6 @@
                     <div class="mf-field {{ $err('id_grupo') ? 'invalid' : '' }}">
                         <label for="qGrupo">Grupo escolar *</label>
                         <select id="qGrupo" name="id_grupo" class="field-control" required>
-                            <option value="">Selecciona un grupo</option>
                             @foreach ($grupos as $grupo)
                                 <option value="{{ $grupo->getKey() }}" @selected((string) old('id_grupo') === (string) $grupo->getKey())>{{ $grupo->clave_grupo }} ({{ $grupo->asignatura?->nombre_asignatura }})</option>
                             @endforeach
@@ -321,6 +320,7 @@
                 limpiarErrores();
                 configurar('crear', {});
                 $('qGrupo').value = @json((string) ($filtros['grupo'] ?? ''));
+                if ($('qGrupo').selectedIndex < 0) $('qGrupo').selectedIndex = 0;
                 cargarFilas([]);
                 abrir(event.currentTarget);
             });
@@ -346,9 +346,11 @@
 
             $('equipoModalClose').addEventListener('click', cerrar);
             $('equipoModalCancel').addEventListener('click', cerrar);
-            overlay.addEventListener('click', (event) => { if (event.target === overlay) cerrar(); });
+            // Clic fuera del cuadro o Escape piden confirmación si hay datos sin guardar.
+            const intentarCerrar = protegerModal(overlay, form, cerrar);
+            overlay.addEventListener('click', (event) => { if (event.target === overlay) intentarCerrar(); });
             document.addEventListener('keydown', (event) => {
-                if (event.key === 'Escape' && overlay.classList.contains('open')) cerrar();
+                if (event.key === 'Escape' && overlay.classList.contains('open')) intentarCerrar();
             });
 
             form.addEventListener('submit', (event) => {

@@ -3,7 +3,9 @@
 namespace App\Http\Controllers;
 
 use App\Models\Role;
+use App\Models\SolicitudProfesor;
 use App\Models\User;
+use App\Services\AvisosCorreoService;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -18,6 +20,8 @@ class UsuarioController extends Controller
     private const DOMINIO = '@upemor.edu.mx';
     // 3 letras mayúsculas + "O" (otoño) + año de registro de 2 dígitos posterior a 2020 + 4 dígitos.
     private const FORMATO_MATRICULA = '/^[A-Z]{3}O(2[1-9]|[3-9][0-9])[0-9]{4}$/';
+
+    public function __construct(private readonly AvisosCorreoService $avisos) {}
 
     public function index(Request $request)
     {
@@ -95,10 +99,49 @@ class UsuarioController extends Controller
             $cambios['password_hash'] = $datos['password'];
         }
 
+        $anterior = $usuario->only(['matricula', 'nombre', 'apellidos', 'correo_institucional', 'id_rol', 'estatus']);
         $usuario->update($cambios);
+
+        $campos = [];
+        foreach ([
+            'matricula' => 'Matrícula', 'nombre' => 'Nombre', 'apellidos' => 'Apellidos',
+            'correo_institucional' => 'Correo institucional', 'id_rol' => 'Rol', 'estatus' => 'Estado de la cuenta',
+        ] as $columna => $etiqueta) {
+            if ((string) $anterior[$columna] !== (string) $usuario->$columna) {
+                $campos[] = $etiqueta;
+            }
+        }
+        if (! empty($datos['password'])) {
+            $campos[] = 'Contraseña';
+        }
+
+        // Si se le asignó otro rol, su solicitud para ser profesor (si había) queda atendida.
+        if ((string) $anterior['id_rol'] !== (string) $usuario->id_rol) {
+            SolicitudProfesor::where('id_usuario', $usuario->id_usuario)->where('estado', SolicitudProfesor::PENDIENTE)
+                ->update(['estado' => SolicitudProfesor::ATENDIDA]);
+        }
+        $this->avisos->perfilModificado($usuario, $campos, 'El Líder del proyecto', $anterior['correo_institucional']);
 
         return redirect()->route('admin.usuarios.index', $this->filtrosDeRetorno($request))
             ->with('status', "Usuario {$usuario->nombre_completo} actualizado correctamente.");
+    }
+
+    /** Alterna la cuenta entre activa e inactiva; el Líder no puede desactivar su propia cuenta. */
+    public function cambiarEstatus(Request $request, User $usuario): RedirectResponse
+    {
+        $volver = redirect()->route('admin.usuarios.index', $this->filtrosDeRetorno($request));
+
+        if ($usuario->is(Auth::user())) {
+            return $volver->with('error', 'No puedes desactivar tu propia cuenta.');
+        }
+
+        $nuevo = $usuario->isActivo() ? User::ESTATUS_INACTIVO : User::ESTATUS_ACTIVO;
+        $usuario->update(['estatus' => $nuevo]);
+        $this->avisos->perfilModificado($usuario, ['Estado de la cuenta ('.($nuevo === User::ESTATUS_ACTIVO ? 'activa' : 'inactiva').')'], 'El Líder del proyecto');
+
+        $accion = $nuevo === User::ESTATUS_ACTIVO ? 'activó' : 'desactivó';
+
+        return $volver->with('status', "Se {$accion} la cuenta de {$usuario->nombre_completo}.");
     }
 
     public function destroy(Request $request, User $usuario): RedirectResponse

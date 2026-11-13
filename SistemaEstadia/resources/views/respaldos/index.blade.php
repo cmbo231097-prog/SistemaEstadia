@@ -60,7 +60,7 @@
     <p class="page-sub">Generación de volcados SQL relacionales, administración de puntos de restauración y recuperación ante contingencias</p>
 
     @if (session('status'))
-        <div class="alert alert-ok" role="status">{{ session('status') }}</div>
+        <div class="alert alert-ok" role="status" data-autocierre>{{ session('status') }}</div>
     @endif
     @if (session('error'))
         <div class="alert alert-err" role="alert">{{ session('error') }}</div>

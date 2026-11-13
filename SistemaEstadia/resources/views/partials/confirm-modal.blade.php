@@ -58,14 +58,30 @@
             toastTimer = setTimeout(() => toast.classList.remove('show'), 2800);
         };
 
+        let cerradoEn = 0;
+
         function close() {
+            cerradoEn = Date.now();
             overlay.classList.remove('open');
             onConfirm = null;
             if (lastFocus) lastFocus.focus();
         }
 
+        // Pregunta de confirmación programática (sin elemento disparador); se usa al intentar salir de un formulario.
+        window.confirmarAccion = function (opciones) {
+            lastFocus = document.activeElement;
+            title.textContent = opciones.titulo;
+            message.textContent = opciones.mensaje;
+            okBtn.textContent = opciones.okLabel || 'Confirmar';
+            cancelBtn.textContent = opciones.cancelLabel || 'Cancelar';
+            onConfirm = opciones.alConfirmar;
+            overlay.classList.add('open');
+            cancelBtn.focus();
+        };
+
         function open(trigger) {
             lastFocus = trigger;
+            cancelBtn.textContent = 'Cancelar';
             title.textContent = trigger.dataset.title || 'Confirmar acción';
             message.textContent = trigger.dataset.message || '¿Deseas continuar?';
             okBtn.textContent = trigger.dataset.okLabel || 'Confirmar';
@@ -81,12 +97,42 @@
             okBtn.focus();
         }
 
-        okBtn.addEventListener('click', () => { const fn = onConfirm; overlay.classList.remove('open'); if (fn) fn(); });
+        okBtn.addEventListener('click', () => { const fn = onConfirm; cerradoEn = Date.now(); overlay.classList.remove('open'); if (fn) fn(); });
         cancelBtn.addEventListener('click', close);
         overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape' && overlay.classList.contains('open')) close();
         });
+
+        /**
+         * Evita cerrar un formulario modal por accidente (clic fuera o Escape): si hay cambios sin guardar
+         * pide confirmación. Devuelve la función que debe usarse en lugar de cerrar() para esos casos.
+         */
+        window.protegerModal = function (modal, formulario, cerrar) {
+            const firma = () => JSON.stringify(Array.from(new FormData(formulario).entries())
+                .filter((par) => par[0] !== '_token')
+                .map((par) => [par[0], par[1] instanceof File ? par[1].name : par[1]]));
+            let inicial = null;
+
+            new MutationObserver(() => {
+                if (modal.classList.contains('open')) inicial = firma();
+            }).observe(modal, { attributes: true, attributeFilter: ['class'] });
+
+            return function () {
+                // Un Escape que acaba de cerrar la confirmación no debe volver a abrirla.
+                if (overlay.classList.contains('open') || Date.now() - cerradoEn < 100) return;
+                const conErrores = formulario.querySelector('.invalid, .mf-error') !== null;
+                if (inicial !== null && firma() === inicial && !conErrores) { cerrar(); return; }
+
+                confirmarAccion({
+                    titulo: '¿Salir sin guardar?',
+                    mensaje: 'Si sales ahora se perderán los datos que capturaste en este formulario.',
+                    okLabel: 'Salir sin guardar',
+                    cancelLabel: 'Seguir editando',
+                    alConfirmar: () => { cerrar(); },
+                });
+            };
+        };
 
         document.addEventListener('click', (e) => {
             const confirmTrigger = e.target.closest('[data-confirm]');

@@ -43,13 +43,15 @@
             button { font-family:inherit; cursor:pointer; }
             :focus-visible { outline:3px solid var(--accent); outline-offset:2px; }
 
-            /* Flecha propia de los desplegables, separada del borde derecho */
-            select {
+            /* Flecha propia de los desplegables, siempre separada del texto y del borde derecho */
+            select, select.field-control {
                 -webkit-appearance:none; appearance:none;
-                padding-right:42px;
+                min-width:0; max-width:100%;
+                padding-right:44px;
+                text-overflow:ellipsis; white-space:nowrap; overflow:hidden;
                 background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5l5 5 5-5' fill='none' stroke='%23334155' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
                 background-repeat:no-repeat;
-                background-position:right 20px center;
+                background-position:right 16px center;
                 background-size:12px 8px;
             }
 
@@ -133,6 +135,19 @@
                 .user-chip { display:none; }
             }
 
+            @include('partials.toggle-password-styles')
+
+            /* Paginación compartida por todos los listados */
+            .pager { display:flex; flex-wrap:wrap; gap:6px; align-items:center; }
+            .pg { font-size:12px; color:var(--blue); font-weight:700; padding:2px 4px; text-decoration:none; }
+            a.pg:hover { text-decoration:underline; }
+            .pg.current { color:var(--text); }
+            .pg.disabled, .pg.gap { color:#94a3b8; font-weight:400; }
+
+            [data-autocierre] { transition:opacity .4s ease, max-height .4s ease, margin .4s ease, padding .4s ease; overflow:hidden; }
+            [data-autocierre].cerrando { opacity:0; max-height:0; margin-top:0; margin-bottom:0; padding-top:0; padding-bottom:0; border-width:0; }
+            @media (prefers-reduced-motion: reduce) { [data-autocierre] { transition:none; } }
+
             @yield('styles')
         </style>
     </head>
@@ -143,6 +158,7 @@
                 <div class="brand">UPEMOR <span>| Plataforma de Evaluación y Sanitización de Corpus Docente con IA</span></div>
             </div>
             <div class="topbar-right">
+                @include('partials.notificaciones')
                 <div class="user-chip">👤 {{ $user->nombre_completo }} [{{ $roleName }}]</div>
                 <form method="POST" action="{{ route('logout') }}" id="logoutForm">
                     @csrf
@@ -180,6 +196,22 @@
                 document.getElementById('backdrop').addEventListener('click', closeNav);
                 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeNav(); });
             })();
+        </script>
+        @include('partials.toggle-password-script')
+        <script>
+            // Si el navegador restaura la pantalla desde su memoria al usar «Atrás», se recarga con datos actuales.
+            window.addEventListener('pageshow', (e) => { if (e.persisted) window.location.reload(); });
+        </script>
+        <script>
+            // Los avisos de éxito (data-autocierre) desaparecen solos a los 3 segundos.
+            document.querySelectorAll('[data-autocierre]').forEach((aviso) => {
+                setTimeout(() => {
+                    aviso.style.maxHeight = aviso.offsetHeight + 'px';
+                    aviso.offsetHeight;
+                    aviso.classList.add('cerrando');
+                    setTimeout(() => aviso.remove(), 450);
+                }, 3000);
+            });
         </script>
         @yield('scripts')
     </body>

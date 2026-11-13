@@ -17,6 +17,13 @@
     .grade-doc { color:#2f8f5b; font-weight:700; }
     .grade-ia { color:var(--blue); font-weight:700; }
     .infra-note { color:var(--muted); }
+    .alert { padding:12px 16px; border-radius:10px; font-size:13px; margin-bottom:16px; border:1px solid; }
+    .alert-ok { background:var(--ok-bg); color:var(--ok-fg); border-color:#a7e3bd; }
+    .alert-err { background:var(--bad-bg); color:var(--bad-fg); border-color:#f3b4b4; }
+    .role-request { justify-content:space-between; }
+    .role-request p { margin:2px 0 0; font-size:12px; color:var(--muted); max-width:70ch; }
+    .role-request .btn { flex:0 1 300px; max-width:none; }
+    .role-request .btn:disabled { opacity:.6; cursor:not-allowed; }
     @media (max-width: 560px) {
         .filter-group { width:100%; }
         .filter-group select { width:100%; }
@@ -31,6 +38,37 @@
 @section('content')
     <h1 class="page-title">Panel de Calificaciones y Retroalimentación</h1>
     <p class="page-sub">Consulta el comparativo de calificaciones por rúbrica entre el profesor y el modelo de IA</p>
+
+    @if (session('status'))
+        <div class="alert alert-ok" role="status" data-autocierre>{{ session('status') }}</div>
+    @endif
+    @if (session('error'))
+        <div class="alert alert-err" role="alert">{{ session('error') }}</div>
+    @endif
+
+    {{-- Solicitud para ser profesor --}}
+    <section class="panel actions role-request" aria-label="Solicitud de rol de profesor">
+        <div>
+            <strong>¿Eres docente?</strong>
+            <p>
+                @if ($solicitudProfesor)
+                    Tu solicitud para ser profesor se envió el {{ $solicitudProfesor->created_at?->format('d/m/Y H:i') }} y está pendiente de revisión por el Líder del proyecto.
+                @else
+                    Solicita el cambio a rol de Profesor. El Líder del proyecto recibirá un correo con tu solicitud y, si la acepta, cambiará tu rol.
+                @endif
+            </p>
+        </div>
+        <form method="POST" action="{{ route('solicitud-profesor.store') }}" id="solicitudProfesorForm">
+            @csrf
+            <button type="button" class="btn btn-navy" @disabled($solicitudProfesor !== null)
+                data-confirm data-submit="#solicitudProfesorForm"
+                data-title="Solicitar el rol de Profesor"
+                data-message="Se enviará un correo al Líder del proyecto con tu nombre, matrícula y correo institucional. Mientras la solicitud esté pendiente no podrás enviar otra. ¿Deseas continuar?"
+                data-ok-label="Enviar solicitud">
+                🧑‍🏫 {{ $solicitudProfesor ? 'Solicitud pendiente' : 'Solicitar cambio a Profesor' }}
+            </button>
+        </form>
+    </section>
 
     {{-- KPIs --}}
     <section class="kpis" aria-label="Indicadores personales">
@@ -67,7 +105,7 @@
                 @endforeach
             </select>
         </div>
-        <button type="button" class="btn btn-navy btn-export" data-soon="Mi Reporte de Contraste (PDF)">📄 Descargar Mi Reporte de Contraste (PDF)</button>
+        <a href="{{ route('contraste.index') }}" class="btn btn-navy btn-export" style="text-decoration:none;text-align:center">📄 Descargar Mi Reporte de Contraste (PDF)</a>
     </section>
 
     {{-- Historial --}}

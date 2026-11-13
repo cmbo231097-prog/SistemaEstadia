@@ -65,7 +65,7 @@
     <p class="page-sub">Vinculación de asignaturas con su docente titular y cuatrimestre</p>
 
     @if (session('status'))
-        <div class="alert alert-ok" role="status">{{ session('status') }}</div>
+        <div class="alert alert-ok" role="status" data-autocierre>{{ session('status') }}</div>
     @endif
     @if (session('error'))
         <div class="alert alert-err" role="alert">{{ session('error') }}</div>
@@ -192,7 +192,6 @@
                     <div class="mf-field mf-full {{ $err('id_asignatura') ? 'invalid' : '' }}">
                         <label for="gAsignatura">Asignatura *</label>
                         <select id="gAsignatura" name="id_asignatura" class="field-control" required>
-                            <option value="">Selecciona una asignatura</option>
                             @foreach ($asignaturas as $asignatura)
                                 <option value="{{ $asignatura->getKey() }}" @selected((string) old('id_asignatura') === (string) $asignatura->getKey())>
                                     {{ $asignatura->clave_asignatura }} — {{ $asignatura->nombre_asignatura }}
@@ -204,7 +203,6 @@
                     <div class="mf-field mf-full {{ $err('id_docente') ? 'invalid' : '' }}">
                         <label for="gDocente">Docente Titular *</label>
                         <select id="gDocente" name="id_docente" class="field-control" required>
-                            <option value="">Selecciona un docente</option>
                             @foreach ($docentes as $docente)
                                 <option value="{{ $docente->getKey() }}" @selected((string) old('id_docente') === (string) $docente->getKey())>{{ $docente->nombre_completo }}</option>
                             @endforeach
@@ -285,9 +283,11 @@
 
             $('grupoModalClose').addEventListener('click', cerrar);
             $('grupoModalCancel').addEventListener('click', cerrar);
-            overlay.addEventListener('click', (event) => { if (event.target === overlay) cerrar(); });
+            // Clic fuera del cuadro o Escape piden confirmación si hay datos sin guardar.
+            const intentarCerrar = protegerModal(overlay, form, cerrar);
+            overlay.addEventListener('click', (event) => { if (event.target === overlay) intentarCerrar(); });
             document.addEventListener('keydown', (event) => {
-                if (event.key === 'Escape' && overlay.classList.contains('open')) cerrar();
+                if (event.key === 'Escape' && overlay.classList.contains('open')) intentarCerrar();
             });
 
             form.addEventListener('submit', (event) => {

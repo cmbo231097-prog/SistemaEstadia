@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Jobs\EvaluarDocumentoConGemini;
 use App\Models\CorpusDocumento;
 use App\Models\Equipo;
 use App\Models\Evidencia;
@@ -19,11 +20,10 @@ use Throwable;
 class CorpusController extends Controller
 {
     public const MAX_POR_LOTE = 10;
+
     private const MAX_KB = 20480;
 
-    public function __construct(private readonly PdfSanitizer $sanitizador)
-    {
-    }
+    public function __construct(private readonly PdfSanitizer $sanitizador) {}
 
     public function index(Request $request)
     {
@@ -38,21 +38,23 @@ class CorpusController extends Controller
             ? $this->evidenciasVisibles()->whereHas('grupos', fn ($q) => $q->where('grupos.id_grupo', $grupo->id_grupo))->orderBy('titulo')->get()
             : collect();
         $evidencia = $evidencias->firstWhere('id_evidencia', (int) $request->query('evidencia')) ?? $evidencias->first();
+        $evidencia?->load('criteriosRubrica');
 
         $equipos = $grupo ? Equipo::where('id_grupo', $grupo->id_grupo)->withCount('integrantes')->orderBy('id_equipo')->get() : collect();
 
         $documentos = collect();
         if ($evidencia && $equipos->isNotEmpty()) {
             $documentos = CorpusDocumento::with('equipo')
+                ->with('ultimaEvaluacionIa.criterios.criterio')
                 ->where('id_evidencia', $evidencia->id_evidencia)
                 ->whereIn('id_equipo', $equipos->pluck('id_equipo'))
                 ->orderBy('id_corpus')
-                ->get()
-                ->map(function (CorpusDocumento $doc) {
-                    $doc->paginas = $this->sanitizador->contarPaginas(Storage::path($doc->ruta_archivo_original));
+                ->get();
 
-                    return $doc;
-                });
+            $paginas = $this->sanitizador->contarPaginasLote(
+                $documentos->map(fn (CorpusDocumento $doc) => Storage::path($doc->ruta_archivo_original))->all()
+            );
+            $documentos->each(fn (CorpusDocumento $doc) => $doc->paginas = $paginas[Storage::path($doc->ruta_archivo_original)] ?? null);
         }
 
         return view('corpus.index', [
@@ -155,6 +157,58 @@ class CorpusController extends Controller
         }
 
         return $respuesta;
+    }
+
+    public function evaluar(Request $request): RedirectResponse
+    {
+        if (! filled(config('services.gemini.api_key'))) {
+            return back()->with('error', 'Configura GEMINI_API_KEY antes de solicitar una evaluación con Gemini.');
+        }
+
+        $datos = $request->validate([
+            'id_evidencia' => ['required', 'integer'],
+            'id_grupo' => ['required', 'integer'],
+        ]);
+
+        $grupo = $this->gruposDisponibles()->firstWhere('id_grupo', (int) $datos['id_grupo']);
+        abort_unless($grupo, 403, 'No puedes evaluar documentos de este grupo.');
+
+        $evidencia = $this->evidenciasVisibles()
+            ->whereKey($datos['id_evidencia'])
+            ->whereHas('grupos', fn ($query) => $query->where('grupos.id_grupo', $grupo->id_grupo))
+            ->firstOrFail();
+
+        if (! $evidencia->tieneRubricaParaIa()) {
+            return $this->volver($grupo, $evidencia)
+                ->with('error', 'Configura la rúbrica de esta evidencia (con al menos un criterio evaluable por la IA) antes de enviarla.');
+        }
+
+        $equiposIds = Equipo::query()->where('id_grupo', $grupo->id_grupo)->pluck('id_equipo');
+        $documentos = CorpusDocumento::query()
+            ->where('id_evidencia', $evidencia->id_evidencia)
+            ->whereIn('id_equipo', $equiposIds)
+            ->get();
+
+        if ($documentos->isEmpty()) {
+            return $this->volver($grupo, $evidencia)
+                ->with('error', 'No hay documentos cargados para esta evidencia.');
+        }
+
+        foreach ($documentos as $documento) {
+            if (! $documento->estaSanitizado()
+                || ! $documento->ruta_archivo_sanitizado
+                || ! Storage::exists($documento->ruta_archivo_sanitizado)) {
+                return $this->volver($grupo, $evidencia)
+                    ->with('error', 'Todos los PDFs deben estar sanitizados y disponibles antes de enviarlos a Gemini.');
+            }
+        }
+
+        foreach ($documentos as $documento) {
+            EvaluarDocumentoConGemini::dispatch($documento->id_corpus);
+        }
+
+        return $this->volver($grupo, $evidencia)
+            ->with('status', 'Se encoló la evaluación de '.count($documentos).' PDF(s). Los resultados aparecerán aquí al terminar el procesamiento.');
     }
 
     public function sanitizarLote(Request $request): RedirectResponse
